@@ -302,7 +302,7 @@ class OSCMessage(object):
 		"""
 		binary = OSCString(self.address)
 		binary += OSCString(self.typetags)
-		binary += self.message
+		binary += self.message.encode()
 		
 		return binary
 
@@ -652,7 +652,7 @@ class OSCBundle(OSCMessage):
 		"""
 		binary = OSCString("#bundle")
 		binary += OSCTimeTag(self.timetag)
-		binary += self.message
+		binary += self.message.encode()
 		
 		return binary
 
@@ -708,7 +708,7 @@ def OSCString(next):
 	"""
 	
 	OSCstringLength = math.ceil((len(next)+1) / 4.0) * 4
-	return struct.pack(">%ds" % (OSCstringLength), str(next))
+	return struct.pack(">%ds" % (OSCstringLength), next.encode())
 
 def OSCBlob(next):
 	"""Convert a string into an OSC Blob.
@@ -717,7 +717,7 @@ def OSCBlob(next):
 	The blob ends with 0 to 3 zero-bytes ('\x00') 
 	"""
 
-	if type(next) in (str,):
+	if type(next) in str:
 		OSCblobLength = math.ceil((len(next)) / 4.0) * 4
 		binary = struct.pack(">i%ds" % (OSCblobLength), OSCblobLength, next)
 	else:
@@ -778,7 +778,7 @@ def OSCTimeTag(time):
 		secs = secs - NTP_epoch
 		binary = struct.pack('>LL', int(secs), int(fract * NTP_units_per_second))
 	else:
-		binary = struct.pack('>LL', int(0), int(1))
+		binary = struct.pack('>LL', 0, 1)
 
 	return binary
 
@@ -791,9 +791,9 @@ def OSCTimeTag(time):
 def _readString(data):
 	"""Reads the next (null-terminated) block of data
 	"""
-	length   = string.find(data,"\0")
+	length   = bytes.find(data, B'\0')
 	nextData = int(math.ceil((length+1) / 4.0) * 4)
-	return (data[0:length], data[nextData:])
+	return (data[0:length].decode(), data[nextData:])
 
 def _readBlob(data):
 	"""Reads the next (numbered) block of data
@@ -970,7 +970,7 @@ def parseUrlStr(url):
 	"""Convert provided string in 'host:port/prefix' format to it's components
 	Returns ((host, port), prefix)
 	"""
-	if not (type(url) in (str,) and len(url)):
+	if not (type(url) in str and len(url)):
 		return (None, '')
 
 	i = url.find("://")
@@ -1234,7 +1234,7 @@ def parseFilterStr(args):
 	"""
 	out = {}
 	
-	if type(args) in (str,):
+	if type(args) in str:
 		args = [args]
 		
 	prefix = None
@@ -1298,7 +1298,7 @@ def getFilterStr(filters):
 	return out
 
 # A translation-table for mapping OSC-address expressions to Python 're' expressions
-OSCtrans = str.maketrans("{,}?","(|).")
+OSCtrans = bytes.maketrans(b"{,}?", b"(|).")
 
 def getRegEx(pattern):
 	"""Compiles and returns a 'regular expression' object for the given address-pattern.
@@ -1382,7 +1382,7 @@ class OSCMultiClient(OSCClient):
 			self.targets[address][0] = prefix
 		
 		if filters != None:
-			if type(filters) in (str,):
+			if type(filters) in str:
 				(_, filters) = parseFilterStr(filters)
 			elif type(filters) != dict:
 				raise TypeError("'filters' argument must be a dict with {addr:bool} entries")
@@ -1396,7 +1396,7 @@ class OSCMultiClient(OSCClient):
 		  - prefix (string): The OSC-address prefix prepended to the address of each OSCMessage
 		  sent to this OSCTarget (optional)
 		"""
-		if type(address) in (str,):
+		if type(address) in str:
 			address = self._searchHostAddr(address)
 				
 		elif (type(address) == tuple):
@@ -1438,7 +1438,7 @@ class OSCMultiClient(OSCClient):
 		the 'address' argument can be a ((host, port) tuple), or a hostname.
 		If the 'prefix' argument is given, the Target is only deleted if the address and prefix match.
 		"""
-		if type(address) in (str,):
+		if type(address) in str:
 			address = self._searchHostAddr(address) 
 
 		if type(address) == tuple:
@@ -1456,7 +1456,7 @@ class OSCMultiClient(OSCClient):
 		the 'address' argument can be a ((host, port) tuple), or a hostname.
 		If the 'prefix' argument is given, the return-value is only True if the address and prefix match.
 		"""
-		if type(address) in (str,):
+		if type(address) in str:
 			address = self._searchHostAddr(address) 
 
 		if type(address) == tuple:
@@ -1494,7 +1494,7 @@ class OSCMultiClient(OSCClient):
 		'address' can be a (host, port) tuple, or a 'host' (string), in which case the first matching OSCTarget is returned
 		Returns (None, ['',{}]) if address not found.
 		"""
-		if type(address) in (str,):
+		if type(address) in str:
 			address = self._searchHostAddr(address) 
 
 		if (type(address) == tuple): 
@@ -2203,7 +2203,7 @@ class OSCServer(UDPServer, OSCAddressSpace):
 			if (type(item) == int) and not have_port:
 				url += ":%d" % item
 				have_port = True
-			elif type(item) in (str,):
+			elif type(item) in str:
 				url += item
 
 		(addr, tail) = parseUrlStr(url)
@@ -2241,7 +2241,7 @@ class OSCServer(UDPServer, OSCAddressSpace):
 			if (type(item) == int) and not have_port:
 				url += ":%d" % item
 				have_port = True
-			elif type(item) in (str,):
+			elif type(item) in str:
 				url += item
 
 		(addr, _) = parseUrlStr(url)
@@ -2486,7 +2486,7 @@ class OSCStreamRequestHandler(StreamRequestHandler, OSCAddressSpace):
 			binary = msg.getBinary()
 			length = len(binary)
 			# prepend length of packet before the actual message (big endian)
-			len_big_endian = array.array('c', '\0' * 4)
+			len_big_endian = array.array('B', B'\0\0\0\0')
 			struct.pack_into(">L", len_big_endian, 0, length)
 			len_big_endian = len_big_endian.tostring()
 			if self._transmit(len_big_endian) and self._transmit(binary):
@@ -2508,7 +2508,7 @@ class OSCStreamRequestHandler(StreamRequestHandler, OSCAddressSpace):
 			tmp = self.connection.recv(count - len(chunk))
 			if not tmp or len(tmp) == 0:
 				return None
-			chunk = chunk + tmp
+			chunk += tmp
 		return chunk
 
 	def _receiveMsg(self):
@@ -2711,7 +2711,7 @@ class OSCStreamingClient(OSCAddressSpace):
 		self._running = False
 		
 	def _receiveWithTimeout(self, count):
-		chunk = str()
+		chunk = bytes()
 		while len(chunk) < count:
 			try:
 				tmp = self.socket.recv(count - len(chunk))
@@ -2730,7 +2730,7 @@ class OSCStreamingClient(OSCAddressSpace):
 			if not tmp or len(tmp) == 0:
 				print("CLIENT: Socket has been closed.")
 				return None
-			chunk = chunk + tmp
+			chunk += tmp
 		return chunk
 	def _receiveMsgWithTimeout(self):
 		""" Receive OSC message from a socket and decode.
@@ -2831,7 +2831,7 @@ class OSCStreamingClient(OSCAddressSpace):
 		binary = msg.getBinary()
 		length = len(binary)
 		# prepend length of packet before the actual message (big endian)
-		len_big_endian = array.array('c', '\0' * 4)
+		len_big_endian = array.array('B', B'\0\0\0\0')
 		struct.pack_into(">L", len_big_endian, 0, length)
 		len_big_endian = len_big_endian.tostring()
 		if self._transmitWithTimeout(len_big_endian) and self._transmitWithTimeout(binary):
